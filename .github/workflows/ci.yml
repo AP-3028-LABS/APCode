@@ -31,14 +31,38 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test (no race)
-        run: go test ./... -count=1
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./... -count=1 -v 2>&1 | tee /tmp/test.log
+          EXIT=${PIPESTATUS[0]}
+          # Always show tail for debugging on failure
+          if [ $EXIT -ne 0 ]; then
+            echo "### Test failures on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -E "^(=== RUN|--- FAIL|--- PASS|FAIL|ok|FAIL)" /tmp/test.log | tail -n 100 >> $GITHUB_STEP_SUMMARY || true
+            grep -A2 "--- FAIL" /tmp/test.log | head -n 200 >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          exit $EXIT
       - name: Test (race)
         # Race detector needs cgo and is slow/flaky on macOS/Windows. Run only on ubuntu where it is reliable.
         # Keep overall CI green by not blocking other OSes on race failures; ubuntu race still validates concurrency.
         if: matrix.os == 'ubuntu-latest'
         env:
           CGO_ENABLED: 1
-        run: go test -race ./... -count=1
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -race ./... -count=1 -v 2>&1 | tee /tmp/test-race.log
+          EXIT=${PIPESTATUS[0]}
+          if [ $EXIT -ne 0 ]; then
+            echo "### Race failures" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -E "^(=== RUN|--- FAIL|FAIL)" /tmp/test-race.log | tail -n 100 >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          exit $EXIT
       - name: Build
         shell: bash
         run: |
