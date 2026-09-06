@@ -8,11 +8,18 @@ on:
 jobs:
   test-unix-install:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+          check-latest: true
       - name: Build binary
         run: go build -ldflags "-X apcode/internal/config.Version=test" -o /tmp/apcode ./cmd/apcode
       - name: Test install.sh via --binary
@@ -28,12 +35,14 @@ jobs:
 
   test-windows-install:
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: true
+          check-latest: true
       - name: Build binary
         shell: pwsh
         run: |
