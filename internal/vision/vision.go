@@ -17,6 +17,9 @@ var supportedExts = map[string]bool{
 	".png":  true,
 	".jpg":  true,
 	".jpeg": true,
+	".webp": true,
+	".gif":  true,
+	".bmp":  true,
 }
 
 // SupportedMime maps extension to MIME type.
@@ -24,6 +27,9 @@ var SupportedMime = map[string]string{
 	".png":  "image/png",
 	".jpg":  "image/jpeg",
 	".jpeg": "image/jpeg",
+	".webp": "image/webp",
+	".gif":  "image/gif",
+	".bmp":  "image/bmp",
 }
 
 // MaxImageSize is 20 MiB.
@@ -67,11 +73,11 @@ func IsSupportedExtension(ext string) bool {
 
 // SupportedExtensions returns the list of supported extensions.
 func SupportedExtensions() []string {
-	return []string{".png", ".jpg", ".jpeg"}
+	return []string{".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 }
 
 // ValidateImageFile validates that path exists, is not a directory, has a supported
-// extension, is not too large, and (optionally) has valid magic bytes for PNG/JPEG.
+// extension, is not too large, and (optionally) has valid magic bytes for known formats.
 func ValidateImageFile(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("%w: path is empty", ErrEmptyPath)
@@ -94,7 +100,7 @@ func ValidateImageFile(path string) error {
 	}
 	ext := strings.ToLower(filepath.Ext(path))
 	if !supportedExts[ext] {
-		return fmt.Errorf("%w: %q (supported: PNG, JPEG)", ErrUnsupportedFormat, ext)
+		return fmt.Errorf("%w: %q (supported: PNG, JPEG, WEBP, GIF, BMP)", ErrUnsupportedFormat, ext)
 	}
 	// Magic byte check (best-effort, does not replace extension check).
 	f, err := os.Open(path)
@@ -102,7 +108,7 @@ func ValidateImageFile(path string) error {
 		return fmt.Errorf("vision: cannot open image %q: %w", path, err)
 	}
 	defer f.Close()
-	header := make([]byte, 8)
+	header := make([]byte, 12)
 	n, _ := f.Read(header)
 	if n >= 8 {
 		// PNG signature 89 50 4E 47 0D 0A 1A 0A
@@ -114,6 +120,16 @@ func ValidateImageFile(path string) error {
 			}
 		} else if header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF {
 			if ext != ".jpg" && ext != ".jpeg" {
+			}
+		} else if n >= 12 && header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
+			header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P' {
+			if ext != ".webp" {
+			}
+		} else if n >= 6 && header[0] == 'G' && header[1] == 'I' && header[2] == 'F' && header[3] == '8' {
+			if ext != ".gif" {
+			}
+		} else if n >= 2 && header[0] == 'B' && header[1] == 'M' {
+			if ext != ".bmp" {
 			}
 		}
 	}
@@ -189,7 +205,7 @@ func BuildOllamaPayload(model, prompt string, images []string, stream bool, maxT
 	return payload
 }
 
-// AttachmentChip returns the display string for an attached image, e.g. "[📁 photo.png]".
+// AttachmentChip returns the display string for an attached image, e.g. "[🖼 photo.png]".
 func AttachmentChip(path string) string {
 	if strings.TrimSpace(path) == "" {
 		return ""
@@ -198,5 +214,5 @@ func AttachmentChip(path string) string {
 	if base == "." || base == "" {
 		base = path
 	}
-	return "[📁 " + base + "]"
+	return "[🖼 " + base + "]"
 }

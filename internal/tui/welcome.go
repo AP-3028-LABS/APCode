@@ -34,7 +34,8 @@ type WelcomeOptions struct {
 	GitBranch string // for status bar; optional
 	TipText   string // override tip sentence; empty => auto
 
-	AttachedImage string // optional image attachment path to show chip, e.g. "/tmp/photo.png"
+	AttachedImage  string   // optional image attachment path to show chip, e.g. "/tmp/photo.png" (kept for compat)
+	AttachedImages []string // optional multiple image attachment paths to show chips
 }
 
 // WelcomeScreen renders the full startup screen in the OpenCode-inspired
@@ -78,8 +79,13 @@ func WelcomeScreen(o WelcomeOptions) string {
 	if modeVal == "" {
 		modeVal = "native"
 	}
-	// Fold old plain lines into the status row pattern
-	boxStr := InputBoxTwoRowWithImage(boxW, modeVal, o.ModelName, o.Provider, o.Highlight, o.AttachedImage)
+	// Fold old plain lines into the status row pattern; old single-image field
+	// is folded into the multi-image list for compatibility.
+	imagePaths := o.AttachedImages
+	if strings.TrimSpace(o.AttachedImage) != "" {
+		imagePaths = append([]string{o.AttachedImage}, imagePaths...)
+	}
+	boxStr := InputBoxTwoRowWithImages(boxW, modeVal, o.ModelName, o.Provider, o.Highlight, imagePaths)
 	for _, line := range strings.Split(boxStr, "\n") {
 		if line == "" {
 			continue

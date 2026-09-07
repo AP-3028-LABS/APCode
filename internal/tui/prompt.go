@@ -72,7 +72,7 @@ const (
 // Kept as a helper so welcome and tests share the same literal.
 func InputPlaceholder() string { return placeholderAsk + " " + placeholderExample }
 
-// AttachmentChip returns the display string for an attached image, e.g. "[📁 photo.png]".
+// AttachmentChip returns the display string for an attached image, e.g. "[🖼 photo.png]".
 // It is styled muted so it appears as a subtle chip in the input status line.
 func AttachmentChip(imagePath string) string {
 	if strings.TrimSpace(imagePath) == "" {
@@ -82,7 +82,19 @@ func AttachmentChip(imagePath string) string {
 	if base == "." || base == "" {
 		base = imagePath
 	}
-	return Muted("[📁 " + base + "]")
+	return Muted("[🖼 " + base + "]")
+}
+
+// AttachmentChips renders multiple attachment chips joined by spaces, e.g.
+// "[🖼 a.png] [🖼 b.png]". Empty/nil inputs yield an empty string.
+func AttachmentChips(imagePaths []string) string {
+	var chips []string
+	for _, p := range imagePaths {
+		if c := AttachmentChip(p); c != "" {
+			chips = append(chips, c)
+		}
+	}
+	return strings.Join(chips, " ")
 }
 
 // InputStatusLine builds row 2 of the input box: color-coded segments
@@ -93,15 +105,25 @@ func AttachmentChip(imagePath string) string {
 // It folds the old "Type a task..." / "native · no model installed" plain line
 // into this single pattern. Empty segments are skipped.
 func InputStatusLine(mode, modelName, provider, highlight string) string {
-	return InputStatusLineWithImage(mode, modelName, provider, highlight, "")
+	return InputStatusLinesWithImages(mode, modelName, provider, highlight, nil)
 }
 
 // InputStatusLineWithImage is like InputStatusLine but prepends an attachment chip
-// when imagePath is non-empty, producing e.g. "[📁 photo.png] · ollama · qwen2-vl".
+// when imagePath is non-empty, producing e.g. "[🖼 photo.png] · ollama · qwen2-vl".
 func InputStatusLineWithImage(mode, modelName, provider, highlight, imagePath string) string {
+	var paths []string
+	if strings.TrimSpace(imagePath) != "" {
+		paths = []string{imagePath}
+	}
+	return InputStatusLinesWithImages(mode, modelName, provider, highlight, paths)
+}
+
+// InputStatusLinesWithImages is like InputStatusLine but prepends one attachment
+// chip per attached image, producing e.g. "[🖼 a.png] [🖼 b.png] · ollama · qwen2-vl".
+func InputStatusLinesWithImages(mode, modelName, provider, highlight string, imagePaths []string) string {
 	var segs []string
-	if chip := AttachmentChip(imagePath); chip != "" {
-		segs = append(segs, chip)
+	if chips := AttachmentChips(imagePaths); chips != "" {
+		segs = append(segs, chips)
 	}
 	if mode != "" {
 		segs = append(segs, Blue(mode))
@@ -158,11 +180,21 @@ func joinWithSep(segs []string, sep string) string {
 // Width is the outer box width (including borders); inner content width is width-4
 // (one border + two spaces padding on each side).
 func InputBoxTwoRow(width int, mode, modelName, provider, highlight string) string {
-	return InputBoxTwoRowWithImage(width, mode, modelName, provider, highlight, "")
+	return InputBoxTwoRowWithImages(width, mode, modelName, provider, highlight, nil)
 }
 
 // InputBoxTwoRowWithImage is like InputBoxTwoRow but includes an attachment chip when imagePath is set.
 func InputBoxTwoRowWithImage(width int, mode, modelName, provider, highlight, imagePath string) string {
+	var paths []string
+	if strings.TrimSpace(imagePath) != "" {
+		paths = []string{imagePath}
+	}
+	return InputBoxTwoRowWithImages(width, mode, modelName, provider, highlight, paths)
+}
+
+// InputBoxTwoRowWithImages is like InputBoxTwoRow but includes one attachment
+// chip per attached image in the status row.
+func InputBoxTwoRowWithImages(width int, mode, modelName, provider, highlight string, imagePaths []string) string {
 	if width < 24 {
 		width = 24
 	}
@@ -194,7 +226,7 @@ func InputBoxTwoRowWithImage(width int, mode, modelName, provider, highlight, im
 		padStr1 = Background(padStr1)
 	}
 
-	status := InputStatusLineWithImage(mode, modelName, provider, highlight, imagePath)
+	status := InputStatusLinesWithImages(mode, modelName, provider, highlight, imagePaths)
 	// Plain width for padding: stripANSI then count
 	statusPlain := stripANSI(status)
 	// If status too long, truncate with style preserved (truncateVisible handles ANSI)

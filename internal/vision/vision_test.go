@@ -25,6 +25,28 @@ func writeJPEG(path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+func writeWebP(path string) error {
+	// RIFF....WEBPVP8 header + dummy payload
+	data := []byte("RIFF\x24\x00\x00\x00WEBPVP8 ")
+	for i := 0; i < 64; i++ {
+		data = append(data, byte(i))
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+func writeGIF(path string) error {
+	return os.WriteFile(path, []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3b"), 0o644)
+}
+
+func writeBMP(path string) error {
+	// BMP header "BM" + dummy pixel data
+	data := []byte{'B', 'M', 26, 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 0}
+	for i := 0; i < 8; i++ {
+		data = append(data, byte(i))
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
 func TestValidateImageFileMissing(t *testing.T) {
 	err := ValidateImageFile("/nonexistent/path.png")
 	if err == nil {
@@ -55,10 +77,10 @@ func TestValidateImageFileUnsupportedFormat(t *testing.T) {
 	if !strings.Contains(err.Error(), "unsupported") {
 		t.Errorf("wrong error: %v", err)
 	}
-	p2 := filepath.Join(tmp, "file.gif")
-	os.WriteFile(p2, []byte("GIF89a"), 0o644)
+	p2 := filepath.Join(tmp, "file.exe")
+	os.WriteFile(p2, []byte("MZ\x90\x00"), 0o644)
 	if err := ValidateImageFile(p2); err == nil {
-		t.Error("gif should be unsupported")
+		t.Error("exe should be unsupported")
 	}
 }
 
@@ -91,6 +113,31 @@ func TestValidateImageFilePNGAndJPEGValid(t *testing.T) {
 	}
 	if err := ValidateImageFile(jpeg); err != nil {
 		t.Errorf("jpeg validate failed: %v", err)
+	}
+}
+
+func TestValidateImageFileExtendedFormats(t *testing.T) {
+	tmp := t.TempDir()
+	cases := []struct {
+		name  string
+		ext   string
+		write func(string) error
+	}{
+		{"webp", ".webp", writeWebP},
+		{"gif", ".gif", writeGIF},
+		{"bmp", ".bmp", writeBMP},
+	}
+	for _, tc := range cases {
+		p := filepath.Join(tmp, "test"+tc.ext)
+		if err := tc.write(p); err != nil {
+			t.Fatalf("write %s: %v", tc.name, err)
+		}
+		if err := ValidateImageFile(p); err != nil {
+			t.Errorf("%s validate failed: %v", tc.name, err)
+		}
+		if m := GetMimeType(p); m == "application/octet-stream" {
+			t.Errorf("%s mime not set", tc.name)
+		}
 	}
 }
 
@@ -203,7 +250,7 @@ func TestAttachmentChip(t *testing.T) {
 	if got := AttachmentChip(""); got != "" {
 		t.Errorf("empty path should be empty, got %q", got)
 	}
-	if got := AttachmentChip("/tmp/photo.png"); got != "[📁 photo.png]" {
+	if got := AttachmentChip("/tmp/photo.png"); got != "[🖼 photo.png]" {
 		t.Errorf("chip wrong: %q", got)
 	}
 	if got := AttachmentChip("a.jpg"); !strings.Contains(got, "a.jpg") {
@@ -212,10 +259,13 @@ func TestAttachmentChip(t *testing.T) {
 }
 
 func TestIsSupportedExtension(t *testing.T) {
-	if !IsSupportedExtension(".png") || !IsSupportedExtension("png") || !IsSupportedExtension(".JPEG") {
-		t.Error("supported ext failed")
+	valid := []string{".png", "png", ".JPEG", ".webp", "gif", ".bmp"}
+	for _, ext := range valid {
+		if !IsSupportedExtension(ext) {
+			t.Errorf("supported ext should be true: %q", ext)
+		}
 	}
-	if IsSupportedExtension(".gif") || IsSupportedExtension("") {
+	if IsSupportedExtension(".txt") || IsSupportedExtension(".exe") || IsSupportedExtension("") {
 		t.Error("unsupported ext should be false")
 	}
 }
@@ -226,5 +276,8 @@ func TestGetMimeType(t *testing.T) {
 	}
 	if GetMimeType("b.jpg") != "image/jpeg" || GetMimeType("c.jpeg") != "image/jpeg" {
 		t.Error("jpeg mime")
+	}
+	if GetMimeType("d.webp") != "image/webp" || GetMimeType("e.gif") != "image/gif" || GetMimeType("f.bmp") != "image/bmp" {
+		t.Error("extended mime")
 	}
 }

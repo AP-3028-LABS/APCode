@@ -1560,7 +1560,7 @@ func runAgent(args []string) {
 		if err := vision.ValidateImageFile(imgPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Image error: %v\n", err)
 			if strings.Contains(err.Error(), "unsupported") {
-				fmt.Fprintln(os.Stderr, "Supported formats: PNG (.png), JPEG (.jpg, .jpeg)")
+				fmt.Fprintln(os.Stderr, "Supported formats: PNG, JPEG, WEBP, GIF, BMP")
 			}
 			os.Exit(1)
 		}
