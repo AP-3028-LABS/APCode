@@ -131,7 +131,7 @@ func TestRunCPUBenchmark(t *testing.T) {
 	ctx := context.Background()
 	config := Config{
 		CPUWorkers:   2,
-		CPUWorkUnits: 1000, // Small for fast test
+		CPUWorkUnits: 500000, // Enough work that duration is reliably positive even on VMs with coarse clocks
 		Timeout:      10 * time.Second,
 	}
 
