@@ -7,8 +7,8 @@ import (
 )
 
 // Version is the current APCode version.
-// Overridden at build time via ldflags: -ldflags "-X apcode/internal/config.Version=x.y.z" (current: 0.1.8)
-var Version = "0.1.8"
+// Overridden at build time via ldflags: -ldflags "-X apcode/internal/config.Version=x.y.z" (current: 0.1.9)
+var Version = "0.1.9"
 
 // AppName is the human-readable application name.
 const AppName = "APCode"
