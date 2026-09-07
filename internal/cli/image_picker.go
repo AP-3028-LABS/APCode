@@ -32,6 +32,34 @@ type pickerEntry struct {
 	isImage bool
 }
 
+// ImagePicker selects an image file for attachment behind a platform-neutral
+// interface. Implementations return the absolute path of the chosen file, or
+// ("", nil) when the user cancels without selecting. Implementations only
+// read the selected file and must never modify, move, or delete it. The image
+// backend, attachment state, and multimodal pipeline are untouched by the
+// picker; the caller attaches whatever path comes back.
+//
+//   - Windows: a native Windows "Open File" dialog, falling back to the
+//     terminal picker when stdin is not an interactive console or the dialog
+//     cannot be launched.
+//   - macOS/Linux: the terminal line-based picker (no desktop requirement).
+type ImagePicker interface {
+	PickImage(startDir string) (string, error)
+}
+
+// terminalImagePicker implements ImagePicker on top of the existing line-based
+// picker. It is the macOS/Linux default and the fallback for scripted-input
+// Windows sessions (piped stdin, tests, CI) where a GUI dialog is not usable.
+type terminalImagePicker struct {
+	repl *REPL
+}
+
+// PickImage runs the interactive line-based picker starting at startDir.
+// It returns the selected absolute path, or "" when the user cancels.
+func (p terminalImagePicker) PickImage(startDir string) (string, error) {
+	return p.repl.pickImageFile(startDir), nil
+}
+
 // pickImageFile runs an interactive, line-oriented image picker starting at
 // startDir. It returns the absolute path of the chosen image file, or "" when
 // the user cancels (Esc, empty line, q/quit). It is line oriented on purpose
@@ -174,4 +202,21 @@ func (r *REPL) readPictureLine() (string, error) {
 		return "", err
 	}
 	return line, nil
+}
+
+// stdinIsTerminal reports whether the REPL input is attached to an
+// interactive character device (a real terminal). Piped stdin, redirected
+// input, scripted feed, and test buffers are not terminals, so interactive
+// only features such as the native Windows file dialog fall back to the
+// line-based picker when stdin is not a console.
+func (r *REPL) stdinIsTerminal() bool {
+	f, ok := r.In.(*os.File)
+	if !ok || f == nil {
+		return false
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }

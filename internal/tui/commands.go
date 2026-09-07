@@ -23,7 +23,7 @@ func DefaultMenuCommands() []Command {
 		{Name: "/status", Description: "system status"},
 		{Name: "/tools", Description: "list agent tools"},
 		{Name: "/context", Description: "project context"},
-		{Name: "/image", Description: "attach image(s) via picker"},
+		{Name: "/image", Description: "attach image using the system file picker"},
 		{Name: "/exit", Description: "exit APCode"},
 	}
 }

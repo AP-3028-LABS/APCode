@@ -503,7 +503,7 @@ func (r *REPL) printHelp() {
 		{"/context", "Show project context summary"},
 		{"/files [dir]", "List files via the agent's file tool"},
 		{"/search <query>", "Search files in the workspace"},
-		{"/image", "Attach image(s) — opens file picker when no path is given"},
+		{"/image", "Attach image(s) using the system file picker when no path is given"},
 		{"/image <path>", "Attach image by path (PNG, JPEG, WEBP, GIF, BMP)"},
 		{"/attach <path>", "Alias for /image <path>"},
 		{"/plan", "Show the plan from the current/last task"},
@@ -1601,10 +1601,11 @@ func (r *REPL) handleTodos() {
 }
 
 // handleImageAttach handles /image and /attach slash commands for multimodal vision.
-// With a path argument the file is attached directly. Without arguments an
-// interactive, terminal-friendly file picker is launched. It never sends
-// anything to the model — the image is attached to the composer and sent with
-// the next prompt on Enter.
+// With a path argument the file is attached directly. Without arguments the
+// platform image picker is used (native Windows Open File dialog on Windows;
+// the terminal line-based picker on macOS/Linux). It never sends anything to
+// the model — the image is attached to the composer and sent with the next
+// prompt on Enter.
 func (r *REPL) handleImageAttach(raw string) {
 	// Extract path after command: "/image <path>" or "/attach <path>"
 	parts := strings.Fields(raw)
@@ -1613,7 +1614,12 @@ func (r *REPL) handleImageAttach(raw string) {
 		if dir == "" {
 			dir, _ = os.Getwd()
 		}
-		if picked := r.pickImageFile(dir); picked != "" {
+		picked, err := newImagePicker(r).PickImage(dir)
+		if err != nil {
+			fmt.Fprintf(r.Out, "%s %v\n", tui.Error("✗ Image error:"), err)
+			return
+		}
+		if picked != "" {
 			if err := r.attachImagePath(picked); err != nil {
 				fmt.Fprintf(r.Out, "%s %v\n", tui.Error("✗ Image error:"), err)
 			}
