@@ -125,8 +125,9 @@ func hardenPathAgainstSymlinks(workspace, abs string) error {
 	}
 
 	real, err := filepath.EvalSymlinks(target)
-	if err != nil {
-		// Cannot resolve (race or permission); fall back to lexical check.
+	if err != nil || real == "" {
+		// Cannot resolve (race, permission, or Windows junction quirk);
+		// fall back to lexical check.
 		real = target
 	}
 	if suffix != "" {
@@ -142,14 +143,6 @@ func hardenPathAgainstSymlinks(workspace, abs string) error {
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || strings.HasPrefix(rel, "../") {
 		return NewToolError(CodePathTraversal, "path escapes workspace via symlink", nil)
-	}
-	// Also verify against the original lexical workspace in case the workspace
-	// itself was reached via a symlinked cwd.
-	if !strings.EqualFold(workspace, realWS) {
-		rel2, err2 := filepath.Rel(workspace, real)
-		if err2 == nil && (rel2 == ".." || strings.HasPrefix(rel2, ".."+string(os.PathSeparator))) {
-			return NewToolError(CodePathTraversal, "path escapes workspace via symlink", nil)
-		}
 	}
 	return nil
 }
