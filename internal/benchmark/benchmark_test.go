@@ -321,7 +321,7 @@ func TestRunnerRun(t *testing.T) {
 	}
 	config := Config{
 		CPUWorkers:      1,
-		CPUWorkUnits:    100, // Very small for fast test
+		CPUWorkUnits:    500000, // Enough work that duration is reliably positive even on VMs with coarse clocks
 		MemorySizeBytes: 1024 * 1024,
 		MemoryPasses:    1,
 		StorageEnabled:  false,
