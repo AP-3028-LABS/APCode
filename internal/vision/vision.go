@@ -44,6 +44,12 @@ var (
 	ErrNotVisionModel    = errors.New("vision: model does not support vision")
 )
 
+// ModelCapabilities captures explicit vision capability independent of name heuristics.
+// It is the small abstraction required for reliable vision routing (Vision: true/false).
+type ModelCapabilities struct {
+	Vision bool
+}
+
 // Vision model identifiers (lowercase substrings that indicate vision capability).
 var visionModelSubstrings = []string{
 	"llava",
@@ -57,6 +63,56 @@ var visionModelSubstrings = []string{
 	"internvl",
 	"llava-phi",
 	"phi-3-vision",
+}
+
+// RecommendedVisionModelIDs are vision models APCode can install via `apcode models install`.
+var RecommendedVisionModelIDs = []string{
+	"qwen2-vl-7b-q4",
+	"llava-7b-q4",
+	"bakllava-7b-q4",
+	"moondream-1.8b-q4",
+	"llava-phi-3b-q4",
+}
+
+// IsVisionCapable reports whether a model supports vision using explicit capabilities
+// when available, otherwise falling back to substring heuristics. An explicit
+// Vision==true always means vision capable; explicit Vision==false with empty
+// ID means not vision; otherwise heuristics apply.
+func IsVisionCapable(modelID string, caps ModelCapabilities) bool {
+	if caps.Vision {
+		return true
+	}
+	return IsVisionModel(modelID)
+}
+
+// VisionCapabilityStatus indicates whether vision support is known or unknown.
+type VisionCapabilityStatus int
+
+const (
+	VisionCapable    VisionCapabilityStatus = iota // explicitly vision
+	VisionNotCapable                               // explicitly text-only
+	VisionUnknown                                  // cannot determine
+)
+
+// EvaluateVisionCapability returns status based on explicit caps and heuristics.
+// If explicit Vision true => Capable, if modelID empty and not explicit => Unknown,
+// otherwise heuristic decides.
+func EvaluateVisionCapability(modelID string, caps *ModelCapabilities) VisionCapabilityStatus {
+	if caps != nil && caps.Vision {
+		return VisionCapable
+	}
+	if strings.TrimSpace(modelID) == "" {
+		return VisionUnknown
+	}
+	if IsVisionModel(modelID) {
+		return VisionCapable
+	}
+	// If caps explicitly false but no ID match, treat as NotCapable if caps provided
+	if caps != nil {
+		return VisionNotCapable
+	}
+	// Without explicit caps, non-vision heuristic means likely text-only
+	return VisionNotCapable
 }
 
 // IsSupportedExtension reports whether ext (with or without leading dot) is supported.

@@ -296,9 +296,11 @@ func (r *REPL) Run(ctx context.Context) error {
 			response, err := r.runAgent(agentCtx, input)
 			cancel()
 			r.Journal.EndGroup()
-			// Clear image attachments automatically once the prompt is sent (spec).
-			r.clearAttachments()
 			if err != nil {
+				// Preserve attachments when blocked due to vision capability so user can retry after switching.
+				if !errors.Is(err, vision.ErrNotVisionModel) {
+					r.clearAttachments()
+				}
 				if err == context.Canceled {
 					fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityWarning, "Cancelled."))
 				} else {
@@ -306,6 +308,8 @@ func (r *REPL) Run(ctx context.Context) error {
 				}
 				continue
 			}
+			// Clear image attachments automatically once the prompt is sent (spec).
+			r.clearAttachments()
 			r.History = append(r.History, Message{Role: "assistant", Content: response})
 			fmt.Fprintf(r.Out, "\n%s\n", tui.Secondary("APCode"))
 			fmt.Fprintf(r.Out, "%s\n\n", tui.ResponseBlock(response, r.uiWidth()))
@@ -759,6 +763,13 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 	if r.Model == nil {
 		return "No local model is installed.\n\nUse:\n  apcode models\n\nA local model is required for AI inference.", nil
 	}
+	// Vision capability guard: do not send images to text-only models.
+	if len(r.Attachments) > 0 {
+		if err := r.ensureVisionModelForRequest(); err != nil {
+			// Wrap with sentinel so caller can preserve attachments.
+			return "", fmt.Errorf("%w: %v", vision.ErrNotVisionModel, err)
+		}
+	}
 	if err := r.Runtime.Load(ctx, r.Model); err != nil {
 		// Handle specific error states with useful messages
 		var re *runtime.RuntimeError
@@ -822,18 +833,13 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 		}
 		fullPrompt = systemPrompt + "\n\n" + fullPrompt
 		// Include attached images for multimodal vision (encode to base64 for Ollama LLaVA etc.)
+		// Vision capability is already ensured before Load; here we just encode.
 		var reqImages []string
 		if len(r.Attachments) > 0 {
-			warnedVision := false
 			for _, a := range r.Attachments {
 				if err := vision.ValidateImageFile(a.Path); err != nil {
 					fmt.Fprintf(r.Out, "%s Image error: %v\n", tui.Warning("⚠"), err)
 					continue
-				}
-				if !warnedVision && r.Model != nil && !vision.IsVisionModel(r.Model.ID) {
-					fmt.Fprintf(r.Out, "%s Model %q may not support vision inputs (text-only model).\n", tui.Warning("⚠"), r.Model.ID)
-					fmt.Fprintln(r.Out, tui.Muted("Try llava, bakllava, or qwen2-vl for image understanding."))
-					warnedVision = true
 				}
 				if b64, err := vision.EncodeImageToBase64(a.Path); err == nil {
 					reqImages = append(reqImages, b64)
@@ -1620,8 +1626,11 @@ func (r *REPL) handleImageAttach(raw string) {
 			return
 		}
 		if picked != "" {
-			if err := r.attachImagePath(picked); err != nil {
+			if err := r.handleVisionAwareAttach(picked); err != nil {
 				fmt.Fprintf(r.Out, "%s %v\n", tui.Error("✗ Image error:"), err)
+				if strings.Contains(err.Error(), "unsupported") {
+					fmt.Fprintln(r.Out, tui.Muted("Supported formats: PNG, JPEG, WEBP, GIF, BMP"))
+				}
 			}
 		}
 		return
@@ -1646,13 +1655,18 @@ func (r *REPL) handleImageAttach(raw string) {
 		}
 		return
 	}
-	if err := r.attachImagePath(path); err != nil {
+	if err := r.handleVisionAwareAttach(path); err != nil {
 		fmt.Fprintf(r.Out, "%s %v\n", tui.Error("✗ Image error:"), err)
+		if strings.Contains(err.Error(), "unsupported") {
+			fmt.Fprintln(r.Out, tui.Muted("Supported formats: PNG, JPEG, WEBP, GIF, BMP"))
+		}
 	}
 }
 
 // attachImagePath validates an image, records its metadata in the composer
 // attachment state, and prints the attached-chip confirmation to the user.
+// It is the legacy low-level attach; vision-aware routing should use
+// handleVisionAwareAttach which handles model switching and blocking.
 func (r *REPL) attachImagePath(path string) error {
 	if err := vision.ValidateImageFile(path); err != nil {
 		return err
@@ -1667,13 +1681,9 @@ func (r *REPL) attachImagePath(path string) error {
 		Mime:     vision.GetMimeType(path),
 		Size:     info.Size(),
 	})
-	// Warn if model is not vision-capable (text-only models); still attach.
-	modelID := ""
-	if r.Model != nil {
-		modelID = r.Model.ID
-	}
-	if modelID != "" && !vision.IsVisionModel(modelID) {
-		fmt.Fprintf(r.Out, "%s Model %q may not support vision inputs (text-only model).\n", tui.Warning("⚠"), modelID)
+	// Warn if model is not vision-capable using explicit capability + heuristic.
+	if r.Model != nil && !isVisionCapableModel(r.Model) {
+		fmt.Fprintf(r.Out, "%s Model %q may not support vision inputs (text-only model).\n", tui.Warning("⚠"), r.Model.ID)
 		fmt.Fprintln(r.Out, tui.Muted("Try a vision model such as llava, bakllava, or qwen2-vl for best results."))
 	}
 	fmt.Fprintf(r.Out, "%s Attached %s\n", tui.Success("✓"), tui.AttachmentChips(r.attachedPaths()))

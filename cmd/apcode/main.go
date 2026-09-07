@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1725,6 +1726,90 @@ func runAgent(args []string) {
 						meta = m
 						break
 					}
+				}
+			}
+			// Vision guard for CLI --image: ensure active model supports vision or switch/block.
+			if imgPath != "" {
+				isVision := false
+				if meta != nil {
+					if meta.Vision || meta.Capabilities.Has(model.CapabilityVision) || vision.IsVisionModel(meta.ID) {
+						isVision = true
+					}
+				}
+				if !isVision {
+					// Collect installed vision models compatible with runtime
+					var installedVision []*model.ModelMetadata
+					for _, m := range manager.ListInstalled() {
+						if m.Vision || m.Capabilities.Has(model.CapabilityVision) || vision.IsVisionModel(m.ID) {
+							if rt.IsCompatible(m) {
+								installedVision = append(installedVision, m)
+							}
+						}
+					}
+					sort.Slice(installedVision, func(i, j int) bool { return installedVision[i].ID < installedVision[j].ID })
+					if meta == nil && len(installedVision) > 0 {
+						// No model selected but image requires vision: pick first vision model
+						chosen := installedVision[0]
+						meta = chosen
+						isVision = true
+						fmt.Fprintln(os.Stdout, tui.Box("APCode · Image Input", []string{
+							tui.Muted("No model selected — selecting vision model for image input"),
+							"  " + chosen.ID,
+						}))
+						fmt.Fprintf(os.Stdout, "%s Vision model selected: %s\n", tui.Success("✓"), chosen.ID)
+					} else if len(installedVision) > 0 {
+						prevID := ""
+						if meta != nil {
+							prevID = meta.ID
+						}
+						chosen := installedVision[0]
+						fmt.Fprintln(os.Stdout, tui.Box("APCode · Image Input", []string{
+							tui.Muted("Current model"),
+							"  " + prevID,
+							"",
+							tui.Warning("⚠ This model does not support vision."),
+							tui.Muted("Switching to vision model: " + chosen.ID),
+						}))
+						fmt.Fprintln(os.Stdout, tui.Box("Model Switch", []string{
+							tui.Muted("Switching model"),
+							"  " + prevID,
+							tui.Muted("       ↓"),
+							"  " + chosen.ID,
+						}))
+						fmt.Fprintf(os.Stdout, "%s Vision model selected: %s\n", tui.Success("✓"), chosen.ID)
+						meta = chosen
+						isVision = true
+					} else {
+						fmt.Fprintln(os.Stdout, tui.Box("APCode · Image Input", []string{
+							tui.Muted("Current model:"),
+							"  " + func() string {
+								if meta != nil {
+									return meta.ID
+								}
+								return "(none)"
+							}(),
+							"",
+							tui.Warning("⚠ No vision-capable local model is installed."),
+							tui.Muted("Image attachments require a vision-capable model."),
+							tui.Muted("Recommended:"),
+							"  qwen2-vl-7b-q4",
+							"  llava-7b-q4",
+							"  bakllava-7b-q4",
+							"",
+							tui.Muted("Install: apcode models install qwen2-vl-7b-q4"),
+							tui.Muted("Or: apcode models install llava-7b-q4"),
+						}))
+						fmt.Fprintf(os.Stderr, "Cannot process image %q with text-only model %q. Install a vision model: apcode models install qwen2-vl-7b-q4\n", imgPath, func() string {
+							if meta != nil {
+								return meta.ID
+							}
+							return "(none)"
+						}())
+						os.Exit(1)
+					}
+				}
+				if isVision {
+					fmt.Fprintf(os.Stdout, "%s Active model supports image input.\n", tui.Success("✓"))
 				}
 			}
 			if meta != nil {

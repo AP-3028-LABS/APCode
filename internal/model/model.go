@@ -54,7 +54,15 @@ const (
 	CapabilityDebugging       Capability = "debugging"
 	CapabilityToolCalling     Capability = "tool_calling"
 	CapabilityReasoning       Capability = "reasoning"
+	CapabilityVision          Capability = "vision"
 )
+
+// ModelCapabilities captures explicit hardware-facing capabilities for routing.
+// It provides a clear boolean representation for vision support beyond
+// substring heuristics.
+type ModelCapabilities struct {
+	Vision bool
+}
 
 // Capabilities is a set of capabilities.
 type Capabilities []Capability
@@ -149,6 +157,11 @@ type ModelMetadata struct {
 	// Capabilities is the set of capabilities this model supports.
 	Capabilities Capabilities
 
+	// Vision indicates explicit vision/multimodal capability.
+	// When true the model supports image inputs; when false it is text-only.
+	// This field provides an explicit boolean beyond substring heuristics.
+	Vision bool
+
 	// RuntimeCompatibility lists compatible local inference runtimes.
 	RuntimeCompatibility []Runtime
 
@@ -225,8 +238,57 @@ func isValidCapability(c Capability) bool {
 		CapabilityDebugging:       true,
 		CapabilityToolCalling:     true,
 		CapabilityReasoning:       true,
+		CapabilityVision:          true,
 	}
 	return valid[c]
+}
+
+// IsVisionCapable reports whether the metadata explicitly supports vision.
+// It checks the Vision field and the Vision capability for an explicit
+// determination without relying on substring heuristics.
+func (m *ModelMetadata) IsVisionCapable() bool {
+	if m == nil {
+		return false
+	}
+	if m.Vision {
+		return true
+	}
+	if m.Capabilities.Has(CapabilityVision) {
+		return true
+	}
+	return false
+}
+
+// VisionCapabilityKnown reports whether vision capability is explicitly known
+// via metadata (Vision field or Vision capability). When false the caller
+// should fall back to heuristic substring matching or treat as unknown.
+func (m *ModelMetadata) VisionCapabilityKnown() bool {
+	if m == nil {
+		return false
+	}
+	if m.Vision {
+		return true
+	}
+	if m.Capabilities.Has(CapabilityVision) {
+		return true
+	}
+	// Explicit text-only is known when Vision is false and capability not present
+	// but model has other capabilities; we treat any non-nil model with ID as known
+	// for the purpose of distinguishing unknown (nil) vs known text-only.
+	// To keep explicit vs heuristic distinct, we consider Vision==false plus
+	// non-vision capability set as known text-only.
+	if strings.TrimSpace(m.ID) != "" {
+		return true
+	}
+	return false
+}
+
+// GetModelCapabilities returns the explicit ModelCapabilities view.
+func (m *ModelMetadata) GetModelCapabilities() ModelCapabilities {
+	if m == nil {
+		return ModelCapabilities{Vision: false}
+	}
+	return ModelCapabilities{Vision: m.IsVisionCapable()}
 }
 
 func isValidQuantization(q Quantization) bool {
@@ -455,5 +517,135 @@ func BuiltInCatalog() []*ModelMetadata {
 			Installed:            false,
 			InstallPath:          "",
 		},
+		// Vision-capable models (explicit Vision flag + Vision capability).
+		{
+			ID:                   "qwen2-vl-7b-q4",
+			Name:                 "Qwen2-VL 7B Q4",
+			Provider:             "Qwen",
+			Family:               "Qwen2-VL",
+			ParameterCount:       7,
+			Quantization:         QuantizationQ4,
+			FileSizeBytes:        4_500_000_000,
+			MinimumRAMBytes:      6_000_000_000,
+			RecommendedRAMBytes:  8_000_000_000,
+			ContextLength:        32768,
+			Architecture:         ArchitectureQwen,
+			Capabilities:         Capabilities{CapabilityCodeGeneration, CapabilityCodeCompletion, CapabilityCodeExplanation, CapabilityVision},
+			Vision:               true,
+			RuntimeCompatibility: []Runtime{RuntimeLlamaCPP, RuntimeOllama},
+			Installed:            false,
+			InstallPath:          "",
+		},
+		{
+			ID:                   "llava-7b-q4",
+			Name:                 "LLaVA 7B Q4",
+			Provider:             "LLaVA",
+			Family:               "LLaVA",
+			ParameterCount:       7,
+			Quantization:         QuantizationQ4,
+			FileSizeBytes:        4_000_000_000,
+			MinimumRAMBytes:      6_000_000_000,
+			RecommendedRAMBytes:  8_000_000_000,
+			ContextLength:        4096,
+			Architecture:         ArchitectureLlama,
+			Capabilities:         Capabilities{CapabilityCodeGeneration, CapabilityCodeCompletion, CapabilityVision},
+			Vision:               true,
+			RuntimeCompatibility: []Runtime{RuntimeLlamaCPP, RuntimeOllama},
+			Installed:            false,
+			InstallPath:          "",
+		},
+		{
+			ID:                   "bakllava-7b-q4",
+			Name:                 "BakLLaVA 7B Q4",
+			Provider:             "BakLLaVA",
+			Family:               "BakLLaVA",
+			ParameterCount:       7,
+			Quantization:         QuantizationQ4,
+			FileSizeBytes:        4_200_000_000,
+			MinimumRAMBytes:      6_000_000_000,
+			RecommendedRAMBytes:  8_000_000_000,
+			ContextLength:        4096,
+			Architecture:         ArchitectureLlama,
+			Capabilities:         Capabilities{CapabilityCodeGeneration, CapabilityCodeCompletion, CapabilityVision},
+			Vision:               true,
+			RuntimeCompatibility: []Runtime{RuntimeLlamaCPP, RuntimeOllama},
+			Installed:            false,
+			InstallPath:          "",
+		},
+		{
+			ID:                   "moondream-1.8b-q4",
+			Name:                 "Moondream 1.8B Q4",
+			Provider:             "Moondream",
+			Family:               "Moondream",
+			ParameterCount:       1.8,
+			Quantization:         QuantizationQ4,
+			FileSizeBytes:        1_200_000_000,
+			MinimumRAMBytes:      2_000_000_000,
+			RecommendedRAMBytes:  3_000_000_000,
+			ContextLength:        2048,
+			Architecture:         ArchitecturePhi,
+			Capabilities:         Capabilities{CapabilityCodeGeneration, CapabilityVision},
+			Vision:               true,
+			RuntimeCompatibility: []Runtime{RuntimeLlamaCPP, RuntimeOllama},
+			Installed:            false,
+			InstallPath:          "",
+		},
+		{
+			ID:                   "llava-phi-3b-q4",
+			Name:                 "LLaVA-Phi 3B Q4",
+			Provider:             "LLaVA",
+			Family:               "LLaVA-Phi",
+			ParameterCount:       3,
+			Quantization:         QuantizationQ4,
+			FileSizeBytes:        2_000_000_000,
+			MinimumRAMBytes:      3_000_000_000,
+			RecommendedRAMBytes:  4_000_000_000,
+			ContextLength:        128000,
+			Architecture:         ArchitecturePhi,
+			Capabilities:         Capabilities{CapabilityCodeGeneration, CapabilityCodeCompletion, CapabilityVision},
+			Vision:               true,
+			RuntimeCompatibility: []Runtime{RuntimeLlamaCPP, RuntimeOllama, RuntimeMLX},
+			Installed:            false,
+			InstallPath:          "",
+		},
 	}
+}
+
+// IsVisionModel reports whether modelID indicates a multimodal vision model
+// (LLaVA, BakLLaVA, Qwen2-VL, etc.) by explicit registry lookup or substring match.
+// This is the heuristic fallback for IDs not in the explicit registry.
+func IsVisionModel(modelID string) bool {
+	// First check explicit registry entries.
+	for _, m := range BuiltInCatalog() {
+		if m.ID == modelID && m.IsVisionCapable() {
+			return true
+		}
+	}
+	// Fallback to substring matching for external/Ollama IDs.
+	lower := strings.ToLower(strings.TrimSpace(modelID))
+	if lower == "" {
+		return false
+	}
+	for _, sub := range visionSubstrings {
+		if strings.Contains(lower, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// visionSubstrings contains lowercase substrings that indicate vision capability
+// for heuristic matching when explicit metadata is unavailable.
+var visionSubstrings = []string{
+	"llava",
+	"bakllava",
+	"qwen2-vl",
+	"qwen-vl",
+	"vision",
+	"moondream",
+	"cogvlm",
+	"minicpm",
+	"internvl",
+	"llava-phi",
+	"phi-3-vision",
 }
