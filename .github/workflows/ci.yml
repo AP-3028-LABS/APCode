@@ -17,8 +17,8 @@ jobs:
         go: ["1.26"]
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
           cache: true
@@ -88,7 +88,7 @@ jobs:
     name: Verify install scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check install.sh syntax
         run: bash -n install.sh
       - name: Check install.sh help

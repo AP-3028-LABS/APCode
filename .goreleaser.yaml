@@ -69,7 +69,7 @@ changelog:
 
 release:
   github:
-    owner: anshulchikhale30-p
+    owner: AP-3028-LABS
     name: APCode
   prerelease: auto
   draft: false
@@ -77,11 +77,11 @@ release:
     ### Install
 
     ```sh
-    curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/AP-3028-LABS/APCode/main/install.sh | bash
     ```
 
     ```powershell
-    irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/AP-3028-LABS/APCode/main/install.ps1 | iex
     ```
 
     Or download the binary for your platform below and add to PATH.
