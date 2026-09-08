@@ -534,6 +534,54 @@ The interface remains usable without relying on color.
 
 ---
 
+# ☁️ Free Cloud Models
+
+APCode supports optional free cloud models through compatible OpenAI-compatible providers.
+
+## Key Points
+
+- **Internet is required** for cloud inference. Local/Ollama models remain available offline.
+- **Users must provide their own provider credentials** where required.
+- **Free model availability can change** without notice.
+- **APCode does not provide or redistribute third-party API credentials.**
+
+## Configuration
+
+Set environment variables before running APCode:
+
+```bash
+export APCode_FREE_ENABLED=true
+export APCode_FREE_API_KEY=your-api-key-here
+export APCode_FREE_BASE_URL=https://your-provider-endpoint.com/v1
+```
+
+Or on Windows PowerShell:
+
+```powershell
+$env:APCode_FREE_ENABLED="true"
+$env:APCode_FREE_API_KEY="your-api-key-here"
+$env:APCode_FREE_BASE_URL="https://your-provider-endpoint.com/v1"
+```
+
+## Usage
+
+List free cloud models:
+
+```bash
+apcode models --free
+```
+
+Available free models are also visible in the TUI via `/models`.
+
+## Important Notes
+
+- Free cloud functionality is **optional** — APCode works fully without it.
+- Ollama/local model support is **never affected** by cloud configuration.
+- API keys are read only from environment variables; they are never stored or logged.
+- Do not claim unlimited free inference — provider limits may apply.
+
+---
+
 # 🏗️ Architecture
 
 APCode keeps the terminal interface separated from the core systems.

@@ -14,6 +14,30 @@ import (
 	"sync"
 )
 
+// ModelSource classifies where a model comes from.
+type ModelSource int
+
+const (
+	// SourceLocal models run on the user's machine (Ollama, llama.cpp, native).
+	SourceLocal ModelSource = iota
+	// SourceFreeCloud models are free cloud models requiring an API key.
+	SourceFreeCloud
+	// SourcePaidCloud models are paid cloud models.
+	SourcePaidCloud
+)
+
+func (s ModelSource) String() string {
+	switch s {
+	case SourceLocal:
+		return "LOCAL"
+	case SourceFreeCloud:
+		return "FREE CLOUD"
+	case SourcePaidCloud:
+		return "PAID CLOUD"
+	}
+	return "UNKNOWN"
+}
+
 // ErrNotImplemented is returned by operations that require a real model.
 var ErrNotImplemented = errors.New("model: not implemented")
 
@@ -170,6 +194,9 @@ type ModelMetadata struct {
 
 	// InstallPath is the local filesystem path if installed.
 	InstallPath string
+
+	// Source classifies where the model comes from.
+	Source ModelSource
 }
 
 // Validate checks the model metadata for validity.
@@ -185,6 +212,24 @@ func (m *ModelMetadata) Validate() error {
 	}
 	if strings.TrimSpace(m.Family) == "" {
 		return errors.New("model: Family cannot be empty")
+	}
+	// Cloud models have relaxed validation for local-only fields.
+	if m.Source == SourceFreeCloud || m.Source == SourcePaidCloud {
+		if m.ContextLength <= 0 {
+			return errors.New("model: ContextLength must be positive")
+		}
+		if strings.TrimSpace(string(m.Architecture)) == "" {
+			return errors.New("model: Architecture cannot be empty")
+		}
+		if len(m.Capabilities) == 0 {
+			return errors.New("model: at least one Capability is required")
+		}
+		for _, cap := range m.Capabilities {
+			if !isValidCapability(cap) {
+				return fmt.Errorf("model: invalid capability %q", cap)
+			}
+		}
+		return nil
 	}
 	if m.ParameterCount <= 0 {
 		return errors.New("model: ParameterCount must be positive")
@@ -648,4 +693,95 @@ var visionSubstrings = []string{
 	"internvl",
 	"llava-phi",
 	"phi-3-vision",
+}
+
+// FreeCloudModel represents a free cloud model entry.
+type FreeCloudModel struct {
+	ID            string
+	Name          string
+	Provider      string
+	BaseURL       string
+	ModelName     string // the model name to send to the provider API
+	ContextLength int
+	Capabilities  Capabilities
+	Vision        bool
+	Free          bool
+}
+
+// ToModelMetadata converts a FreeCloudModel to a ModelMetadata for registry use.
+func (f *FreeCloudModel) ToModelMetadata() *ModelMetadata {
+	return &ModelMetadata{
+		ID:                   f.ID,
+		Name:                 f.Name,
+		Provider:             f.Provider,
+		Family:               f.Provider,
+		ParameterCount:       0,
+		Quantization:         "",
+		FileSizeBytes:        0,
+		MinimumRAMBytes:      0,
+		RecommendedRAMBytes:  0,
+		ContextLength:        f.ContextLength,
+		Architecture:         ArchitectureQwen,
+		Capabilities:         f.Capabilities,
+		Vision:               f.Vision,
+		RuntimeCompatibility: nil, // cloud models have no local runtime
+		Installed:            false,
+		InstallPath:          "",
+		Source:               SourceFreeCloud,
+	}
+}
+
+// FreeCloudCatalog returns a catalog of known free cloud models (metadata only).
+// These are metadata entries only - no inference is performed by this catalog.
+// Users must configure their own provider API keys.
+func FreeCloudCatalog() []*FreeCloudModel {
+	return []*FreeCloudModel{
+		{
+			ID:            "qwen2.5-coder-free",
+			Name:          "Qwen2.5-Coder 7B Free",
+			Provider:      "Qwen",
+			BaseURL:       "https://api.openai-compatible.com/v1",
+			ModelName:     "qwen2.5-coder-7b",
+			ContextLength: 32768,
+			Capabilities:  Capabilities{CapabilityCodeGeneration, CapabilityCodeCompletion, CapabilityCodeExplanation, CapabilityRefactoring, CapabilityToolCalling, CapabilityReasoning},
+			Vision:        false,
+			Free:          true,
+		},
+		{
+			ID:            "deepseek-coder-free",
+			Name:          "DeepSeek Coder Free",
+			Provider:      "DeepSeek",
+			BaseURL:       "https://api.deepseek-compatible.com/v1",
+			ModelName:     "deepseek-coder",
+			ContextLength: 16384,
+			Capabilities:  Capabilities{CapabilityCodeGeneration, CapabilityCodeCompletion, CapabilityCodeExplanation, CapabilityRefactoring, CapabilityToolCalling},
+			Vision:        false,
+			Free:          true,
+		},
+	}
+}
+
+// IsFreeCloudModel reports whether modelID corresponds to a free cloud model.
+func IsFreeCloudModel(modelID string) bool {
+	for _, m := range FreeCloudCatalog() {
+		if m.ID == modelID {
+			return true
+		}
+	}
+	return false
+}
+
+// GetFreeCloudModel returns a FreeCloudModel by ID, or nil if not found.
+func GetFreeCloudModel(modelID string) *FreeCloudModel {
+	for _, m := range FreeCloudCatalog() {
+		if m.ID == modelID {
+			return m
+		}
+	}
+	return nil
+}
+
+// FormatSource returns a human-readable string for the model source.
+func FormatSource(source ModelSource) string {
+	return source.String()
 }

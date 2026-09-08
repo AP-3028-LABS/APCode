@@ -499,7 +499,7 @@ func (r *REPL) printHelp() {
 	cmds := []struct{ cmd, desc string }{
 		{"/help", "Show this help"},
 		{"/new", "New session (clears conversation)"},
-		{"/models", "List available models"},
+		{"/models", "List available models (local + free cloud)"},
 		{"/model", "Show the currently selected model"},
 		{"/runtime", "Show runtime status"},
 		{"/status", "Show project and system status"},
@@ -615,6 +615,7 @@ func (r *REPL) handleModels() {
 	}
 	all := manager.ListAll()
 	fmt.Fprintln(r.Out, tui.Primary("Models:"))
+	fmt.Fprintln(r.Out, tui.Muted("LOCAL"))
 	for _, m := range all {
 		status := tui.Warning("not installed")
 		if m.Installed {
@@ -622,6 +623,16 @@ func (r *REPL) handleModels() {
 		}
 		fmt.Fprintf(r.Out, "  %s (%s) - %s\n", m.Name, m.ID, status)
 	}
+	freeModels := model.FreeCloudCatalog()
+	if len(freeModels) > 0 {
+		fmt.Fprintln(r.Out)
+		fmt.Fprintln(r.Out, tui.Primary("FREE CLOUD"))
+		for _, m := range freeModels {
+			fmt.Fprintf(r.Out, "  %s (%s) - %s\n", m.Name, m.ID, tui.Success("Free"))
+		}
+	}
+	fmt.Fprintln(r.Out)
+	fmt.Fprintln(r.Out, tui.Muted("Use apcode models --free for free cloud model details."))
 }
 
 func (r *REPL) handleRuntime() {

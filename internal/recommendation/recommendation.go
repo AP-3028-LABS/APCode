@@ -69,7 +69,15 @@ type RecommendationInput struct {
 
 // Validate checks the input for validity.
 func (i *RecommendationInput) Validate() error {
-	if i.Hardware.OS == "" && i.Hardware.Arch == "" {
+	// Cloud-only models don't require hardware profile.
+	allCloud := true
+	for _, m := range i.Models {
+		if m.Source != model.SourceFreeCloud && m.Source != model.SourcePaidCloud {
+			allCloud = false
+			break
+		}
+	}
+	if !allCloud && i.Hardware.OS == "" && i.Hardware.Arch == "" {
 		return errors.New("recommendation: hardware profile is empty")
 	}
 	if len(i.Models) == 0 {
@@ -257,7 +265,36 @@ func (r *Recommender) evaluateCandidate(input RecommendationInput, m *model.Mode
 		Rejected: false,
 	}
 
-	// 1. Evaluate memory fit (HARD CONSTRAINT)
+	// Cloud models are not constrained by local hardware RAM.
+	if m.Source == model.SourceFreeCloud || m.Source == model.SourcePaidCloud {
+		// 1. Capability match for cloud models
+		c.CapabilityMatch = m.Capabilities.Has(input.RequestedCapability)
+		if input.RequestedCapability != "" && c.CapabilityMatch {
+			c.FitScore += WeightCapabilityMatch
+			c.Reasons = append(c.Reasons, fmt.Sprintf("Supports %s", input.RequestedCapability))
+		} else if input.RequestedCapability != "" {
+			c.FitScore += 0
+		} else {
+			c.FitScore += WeightCapabilityMatch / 2
+			c.Reasons = append(c.Reasons, "General purpose model")
+		}
+		// Cloud models don't need hardware RAM checks.
+		c.MemoryFit = MemoryFit{Status: RAMStatusGood, Reason: "Cloud model; no local RAM constraint"}
+		// 2. Model efficiency (smaller models score higher for efficiency)
+		efficiencyScore := r.scoreEfficiency(m, input.Preference)
+		c.FitScore += efficiencyScore
+		// 3. Context length
+		contextScore := r.scoreContextLength(m, input.Preference)
+		c.FitScore += contextScore
+		c.FitScore += WeightCapabilityMatch / 2 // Cloud availability bonus
+		// Cap at max
+		if c.FitScore > MaxFitScore {
+			c.FitScore = MaxFitScore
+		}
+		return c
+	}
+
+	// 1. Evaluate memory fit (HARD CONSTRAINT) for local models.
 	memFit := EvaluateMemoryFit(input.Hardware, m)
 	c.MemoryFit = memFit
 
@@ -447,6 +484,44 @@ func (r *Recommender) buildUncertainty(input RecommendationInput, result Recomme
 	}
 
 	return "Uncertainties: " + joinWithSemicolon(parts)
+}
+
+// RecommendFreeCloudModels evaluates free cloud models without hardware constraints.
+// This is separate from Recommend because cloud models do not have local RAM requirements.
+func (r *Recommender) RecommendFreeCloudModels(models []*model.ModelMetadata) ([]*Candidate, error) {
+	if len(models) == 0 {
+		return nil, ErrNoModels
+	}
+	var candidates []*Candidate
+	for _, m := range models {
+		if m.Source != model.SourceFreeCloud {
+			continue
+		}
+		c := &Candidate{
+			Model:    m,
+			FitScore: 0,
+			Reasons:  []string{},
+			Warnings: []string{},
+			Rejected: false,
+		}
+		c.MemoryFit = MemoryFit{Status: RAMStatusGood, Reason: "Cloud model; no local RAM constraint"}
+		// Score by context length and capabilities
+		contextScore := r.scoreContextLength(m, PreferenceBalanced)
+		c.FitScore += contextScore
+		c.FitScore += WeightCapabilityMatch / 2 // Cloud availability bonus
+		if c.FitScore > MaxFitScore {
+			c.FitScore = MaxFitScore
+		}
+		candidates = append(candidates, c)
+	}
+	if len(candidates) == 0 {
+		return nil, ErrNoCandidates
+	}
+	// Sort by fit score descending
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].FitScore > candidates[j].FitScore
+	})
+	return candidates, nil
 }
 
 func formatContext(tokens int) string {

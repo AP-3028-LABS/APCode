@@ -156,6 +156,18 @@ func runBenchmark() {
 }
 
 func runModels(args []string) {
+	// Handle --free flag
+	showFree := false
+	filteredArgs := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "--free" {
+			showFree = true
+		} else {
+			filteredArgs = append(filteredArgs, a)
+		}
+	}
+	args = filteredArgs
+
 	registry := model.NewModelRegistry()
 	for _, m := range model.BuiltInCatalog() {
 		if err := registry.Add(m); err != nil {
@@ -171,8 +183,13 @@ func runModels(args []string) {
 		os.Exit(1)
 	}
 
-	if len(args) == 0 {
+	if len(args) == 0 && !showFree {
 		printModels(os.Stdout, manager.ListAll())
+		return
+	}
+
+	if showFree {
+		printFreeModels(os.Stdout)
 		return
 	}
 
@@ -461,8 +478,36 @@ func printModelsHelp() {
 	out := flag.CommandLine.Output()
 	fmt.Fprintf(out, "Usage:\n")
 	fmt.Fprintf(out, "  apcode models              List all models\n")
+	fmt.Fprintf(out, "  apcode models --free       List free cloud models\n")
 	fmt.Fprintf(out, "  apcode models installed    List installed models\n")
 	fmt.Fprintf(out, "  apcode models info <id>    Show detailed model information\n")
+}
+
+func printFreeModels(w *os.File) {
+	fmt.Fprintln(w, tui.Primary("APCode Free Cloud Models"))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, tui.Muted("────────────────────────────────────────────────────────────"))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, tui.Muted("These models require an API key from the provider."))
+	fmt.Fprintln(w, tui.Muted("Set APCode_FREE_API_KEY and APCode_FREE_BASE_URL to use them."))
+	fmt.Fprintln(w)
+
+	for _, m := range model.FreeCloudCatalog() {
+		fmt.Fprintf(w, "%s  %s\n", tui.Primary(m.Name), tui.Muted("("+m.ID+")"))
+		fmt.Fprintf(w, "  %s %s\n", tui.Muted("Provider:"), m.Provider)
+		fmt.Fprintf(w, "  %s %s\n", tui.Muted("Source:"), tui.Success("Free Cloud"))
+		fmt.Fprintf(w, "  %s %s\n", tui.Muted("Context:"), formatContextLength(m.ContextLength))
+		fmt.Fprintf(w, "  %s %s\n", tui.Muted("Capabilities:"), formatCapabilities(m.Capabilities))
+		fmt.Fprintf(w, "  %s %s\n", tui.Muted("Free:"), tui.Success("yes"))
+		fmt.Fprintln(w)
+	}
+
+	fmt.Fprintf(w, "%s %d model(s)\n", tui.Muted("Total:"), len(model.FreeCloudCatalog()))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, tui.Muted("To use a free model, set:"))
+	fmt.Fprintln(w, tui.Muted("  APCode_FREE_API_KEY=<your-api-key>"))
+	fmt.Fprintln(w, tui.Muted("  APCode_FREE_BASE_URL=<provider-endpoint>"))
+	fmt.Fprintln(w, tui.Muted("  APCode_FREE_ENABLED=true"))
 }
 
 // formatBytes formats a byte count as a human-readable string with
@@ -582,7 +627,7 @@ func printHelp() {
 	fmt.Fprintf(out, "We care about your system. 😄\n")
 	fmt.Fprintf(out, "So you can focus on your ideas. 💡\n")
 	fmt.Fprintf(out, "Making the most of every bit of your laptop. ⚡\n\n")
-	fmt.Fprintf(out, "Usage:\n  apcode [flags]\n  apcode benchmark\n  apcode models\n  apcode models installed\n  apcode models info <id>\n  apcode recommend\n  apcode context\n  apcode runtime\n  apcode init [--dir <path>] [--force]\n  apcode run <instruction> [--model <id>] [--stream] [--max-iterations N]\n  apcode infer <prompt> [--model <id>] [--stream]\n  apcode search <query> [--dir <path>] [--limit N]\n\nFlags:\n")
+	fmt.Fprintf(out, "Usage:\n  apcode [flags]\n  apcode benchmark\n  apcode models\n  apcode models --free\n  apcode models installed\n  apcode models info <id>\n  apcode recommend\n  apcode context\n  apcode runtime\n  apcode init [--dir <path>] [--force]\n  apcode run <instruction> [--model <id>] [--stream] [--max-iterations N]\n  apcode infer <prompt> [--model <id>] [--stream]\n  apcode search <query> [--dir <path>] [--limit N]\n\nFlags:\n")
 	flag.PrintDefaults()
 }
 
